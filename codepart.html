@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>學測作文線上打字稿紙 (38行x22字)</title>
-    <!-- 引入 html2canvas (圖片匯出) 與 jspdf (PDF匯出) -->
+    <!-- 引入 html2canvas (圖片匯出) 與 jspdf (PDF匯出) 套件 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -246,7 +246,7 @@
             }
         });
 
-        // 填入文字與順序移動（句號「。」當作一般文字處理，不換行）
+        // 填入文字與順序移動（句號「。」視為一般文字，不自動換行）
         function handleInputText(text) {
             if (!text) return;
 
@@ -277,7 +277,7 @@
 
             if (e.key === 'Enter') {
                 e.preventDefault();
-                jumpToNextLine(); // 只有按下 Enter 鍵才跳下一行
+                jumpToNextLine();
             } else if (e.key === 'Backspace') {
                 e.preventDefault();
                 if (cellsArray[currentIndex].innerText !== '') {

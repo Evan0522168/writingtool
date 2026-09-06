@@ -17,4 +17,4 @@
 
 1. 將本專案複製（Clone）或下載至本地電腦：
    ```bash
-   git clone [https://github.com/你的帳號/你的專案名稱.git](https://github.com/你的帳號/你的專案名稱.git)
+   git clone [https://github.com/你的帳號/你的專案名稱.git](https://github.com/evan0522168/writingtool.git)

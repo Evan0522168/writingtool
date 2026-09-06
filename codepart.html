@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學測作文線上打字稿紙 (38行x22字)</title>
+    <!-- 引入 html2canvas (圖片匯出) 與 jspdf (PDF匯出) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "SF Pro TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .controls {
+            margin-bottom: 15px;
+            background: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            max-width: 1000px;
+        }
+
+        .tips {
+            font-size: 13px;
+            color: #555;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 5px;
+            line-height: 1.5;
+        }
+
+        .stats {
+            font-weight: bold;
+            color: #d9534f;
+            font-size: 15px;
+        }
+
+        .btn {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .btn:hover { background-color: #357abd; }
+        .btn:active { transform: scale(0.98); }
+        .btn-green { background-color: #2eb85c; }
+        .btn-green:hover { background-color: #249349; }
+        .btn-clear { background-color: #e55353; }
+        .btn-clear:hover { background-color: #d93737; }
+
+        .grid-wrapper {
+            background-color: #fff;
+            padding: 25px;
+            border: 2px solid #d9534f;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            overflow-x: auto;
+            max-width: 98vw;
+        }
+
+        .grid-container {
+            display: flex;
+            flex-direction: row-reverse;
+            background-color: #fff;
+            width: max-content;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+            width: 34px;
+        }
+
+        .line-number {
+            height: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: #d9534f;
+            font-weight: bold;
+            border-bottom: 2px solid #d9534f;
+            margin-bottom: 2px;
+            background-color: #fff0f0;
+            user-select: none;
+        }
+
+        .cell {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #f2a29f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 500;
+            color: #333;
+            cursor: pointer;
+            user-select: none;
+            background-color: #fff;
+            transition: background-color 0.15s;
+        }
+
+        .cell:hover { background-color: #ffe6e6; }
+        .cell.focus {
+            background-color: #ffd1d1;
+            outline: 2px solid #d9534f;
+            outline-offset: -2px;
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+            top: -9999px;
+            left: -9999px;
+        }
+    </style>
+</head>
+<body>
+
+    <input type="text" id="hidden-input" autocomplete="off">
+
+    <div class="controls">
+        <div class="tips">
+            ⌨️ <b>線上打字稿紙說明：</b><br>
+            1. 點擊任意格子即可開始直接打字（支援中文注音/拼音輸入法）。<br>
+            2. 按下 <b>「Enter」</b> 鍵才會跳下一行（第 1 行預設空 4 格，第 2 行起自動縮排空 2 格）。<br>
+            3. 輸入句號「。」只會正常移至下一格；按下 <b>「Backspace」</b> 可退格刪除。
+        </div>
+        <div class="stats">已用字數：<span id="char-count">0</span> / 836 字</div>
+        <button class="btn btn-green" onclick="copyFullText()">📋 複製全文</button>
+        <button class="btn" onclick="exportAsJPG()">🖼️ 下載 JPG</button>
+        <button class="btn" onclick="exportAsPDF()">📄 下載 PDF</button>
+        <button class="btn btn-clear" onclick="clearGrid()">🗑️ 重置/清空稿紙</button>
+    </div>
+
+    <div class="grid-wrapper" id="scroll-wrapper">
+        <div class="grid-container" id="grid"></div>
+    </div>
+
+    <script>
+        const TOTAL_LINES = 38;    // 38 行
+        const CHARS_PER_LINE = 22; // 每行 22 字
+        const totalCells = TOTAL_LINES * CHARS_PER_LINE;
+        
+        let cellsArray = [];
+        let currentIndex = 4; // 預設聚焦於第 1 行第 5 格 (索引 4，預留前 4 格標題空白)
+        let isComposing = false; // 中文輸入法組字狀態
+
+        const hiddenInput = document.getElementById('hidden-input');
+
+        function createGrid() {
+            const gridContainer = document.getElementById('grid');
+            gridContainer.innerHTML = '';
+            cellsArray = new Array(totalCells);
+
+            for (let line = 1; line <= TOTAL_LINES; line++) {
+                const col = document.createElement('div');
+                col.className = 'column';
+
+                const lineNum = document.createElement('div');
+                lineNum.className = 'line-number';
+                lineNum.innerText = line;
+                col.appendChild(lineNum);
+
+                for (let row = 1; row <= CHARS_PER_LINE; row++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                    const globalIndex = (line - 1) * CHARS_PER_LINE + (row - 1);
+                    cell.dataset.index = globalIndex;
+                    cell.onclick = () => focusCell(globalIndex);
+                    
+                    col.appendChild(cell);
+                    cellsArray[globalIndex] = cell;
+                }
+                gridContainer.appendChild(col);
+            }
+            focusCell(currentIndex);
+        }
+
+        function focusCell(index) {
+            if (index < 0) index = 0;
+            if (index >= totalCells) index = totalCells - 1;
+
+            if (cellsArray[currentIndex]) {
+                cellsArray[currentIndex].classList.remove('focus');
+            }
+
+            currentIndex = index;
+            cellsArray[currentIndex].classList.add('focus');
+
+            // 自動將畫面捲動至目前的輸入格
+            cellsArray[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            hiddenInput.focus();
+        }
+
+        // 僅在按下 Enter 鍵時呼叫：跳下一行並自動縮排
+        function jumpToNextLine() {
+            const currentLine = Math.floor(currentIndex / CHARS_PER_LINE);
+            const nextLine = currentLine + 1;
+
+            if (nextLine < TOTAL_LINES) {
+                // 第 1 行 (nextLine 0) 空 4 格 -> 第 5 格 (索引 4)
+                // 第 2 行起 (nextLine >= 1) 空 2 格 -> 第 3 格 (索引 2)
+                const indent = (nextLine === 0) ? 4 : 2;
+                const nextIndex = nextLine * CHARS_PER_LINE + indent;
+                focusCell(nextIndex);
+            } else {
+                alert("已到達稿紙最後一行！");
+            }
+        }
+
+        // 監聽中文輸入法 (IME) 組合事件
+        hiddenInput.addEventListener('compositionstart', () => { isComposing = true; });
+        hiddenInput.addEventListener('compositionend', (e) => {
+            isComposing = false;
+            handleInputText(e.data);
+            hiddenInput.value = '';
+        });
+
+        // 監聽一般字元輸入
+        hiddenInput.addEventListener('input', (e) => {
+            if (!isComposing && e.data) {
+                handleInputText(e.data);
+                hiddenInput.value = '';
+            }
+        });
+
+        // 填入文字與順序移動（句號「。」當作一般文字處理，不換行）
+        function handleInputText(text) {
+            if (!text) return;
+
+            const charArray = Array.from(text);
+
+            for (let i = 0; i < charArray.length; i++) {
+                const char = charArray[i];
+
+                if (char === '\n') {
+                    jumpToNextLine();
+                } else {
+                    cellsArray[currentIndex].innerText = char;
+                    if (currentIndex + 1 < totalCells) {
+                        focusCell(currentIndex + 1);
+                    }
+                }
+            }
+            updateCount();
+        }
+
+        // 按鍵監聽（只有 Enter 鍵觸發換行）
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement !== hiddenInput) {
+                hiddenInput.focus();
+            }
+
+            if (isComposing) return;
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                jumpToNextLine(); // 只有按下 Enter 鍵才跳下一行
+            } else if (e.key === 'Backspace') {
+                e.preventDefault();
+                if (cellsArray[currentIndex].innerText !== '') {
+                    cellsArray[currentIndex].innerText = '';
+                } else if (currentIndex > 0) {
+                    focusCell(currentIndex - 1);
+                    cellsArray[currentIndex].innerText = '';
+                }
+                updateCount();
+            } else if (e.key === 'ArrowLeft') {
+                focusCell(currentIndex + CHARS_PER_LINE);
+            } else if (e.key === 'ArrowRight') {
+                focusCell(currentIndex - CHARS_PER_LINE);
+            } else if (e.key === 'ArrowUp') {
+                focusCell(currentIndex - 1);
+            } else if (e.key === 'ArrowDown') {
+                focusCell(currentIndex + 1);
+            }
+        });
+
+        document.body.onclick = (e) => {
+            if (!e.target.classList.contains('btn') && e.target.id !== 'hidden-input') {
+                hiddenInput.focus();
+            }
+        };
+
+        function updateCount() {
+            let count = 0;
+            cellsArray.forEach(cell => {
+                if (cell.innerText.trim() !== '') count++;
+            });
+            document.getElementById('char-count').innerText = count;
+        }
+
+        function clearGrid() {
+            if (confirm("確定要重置/清空稿紙嗎？")) {
+                cellsArray.forEach(cell => cell.innerText = '');
+                focusCell(4);
+                updateCount();
+            }
+        }
+
+        function copyFullText() {
+            let fullText = "";
+            for (let line = 0; line < TOTAL_LINES; line++) {
+                let currentLineText = "";
+                for (let row = 0; row < CHARS_PER_LINE; row++) {
+                    const idx = line * CHARS_PER_LINE + row;
+                    const char = cellsArray[idx].innerText;
+                    currentLineText += (char !== "" ? char : " ");
+                }
+                fullText += currentLineText.replace(/\s+$/, '') + "\n";
+            }
+
+            fullText = fullText.trimEnd();
+
+            if (fullText.trim() === "") {
+                alert("目前稿紙上沒有文字！");
+                return;
+            }
+
+            navigator.clipboard.writeText(fullText).then(() => {
+                alert("全文已成功複製到剪貼簿！");
+            }).catch(err => {
+                const textarea = document.createElement("textarea");
+                textarea.value = fullText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textarea);
+                alert("全文已成功複製到剪貼簿！");
+            });
+        }
+
+        async function captureFullGrid() {
+            const gridContainer = document.getElementById('grid');
+            const wrapper = document.getElementById('scroll-wrapper');
+            
+            const originalWrapperWidth = wrapper.style.width;
+            const originalOverflow = wrapper.style.overflow;
+            
+            wrapper.style.width = 'fit-content';
+            wrapper.style.overflow = 'visible';
+
+            if (cellsArray[currentIndex]) {
+                cellsArray[currentIndex].classList.remove('focus');
+            }
+
+            const canvas = await html2canvas(gridContainer, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: "#ffffff",
+                windowWidth: gridContainer.scrollWidth + 100
+            });
+
+            if (cellsArray[currentIndex]) {
+                cellsArray[currentIndex].classList.add('focus');
+            }
+
+            wrapper.style.width = originalWrapperWidth;
+            wrapper.style.overflow = originalOverflow;
+
+            return canvas;
+        }
+
+        async function exportAsJPG() {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "產生中...";
+
+            try {
+                const canvas = await captureFullGrid();
+                const link = document.createElement('a');
+                link.download = '學測作文打字稿紙.jpg';
+                link.href = canvas.toDataURL('image/jpeg', 0.9);
+                link.click();
+            } catch (err) {
+                alert("匯出圖片失敗：" + err);
+            } finally {
+                btn.innerText = originalText;
+            }
+        }
+
+        async function exportAsPDF() {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "產生中...";
+
+            try {
+                const canvas = await captureFullGrid();
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                const { jsPDF } = window.jspdf;
+
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+                const orientation = imgWidth > imgHeight ? 'l' : 'p';
+
+                const pdf = new jsPDF(orientation, 'pt', [imgWidth, imgHeight]);
+                pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+                pdf.save('學測作文打字稿紙.pdf');
+            } catch (err) {
+                alert("匯出 PDF 失敗：" + err);
+            } finally {
+                btn.innerText = originalText;
+            }
+        }
+
+        createGrid();
+    </script>
+</body>
+</html>

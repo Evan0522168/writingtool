@@ -16,4 +16,4 @@
 ## 🚀 使用方法
 
 1. 將本專案複製（Clone）或下載至本地電腦：
-   git clone [https://evan0522168.github.io/writingtool/]
+   git clone [https://evan0522168.github.io/writingtool/index.html]
